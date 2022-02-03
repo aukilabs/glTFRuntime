@@ -993,6 +993,19 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FglTFRuntimeSkeletalMeshAsync, USkeletalMesh*,
 class GLTFRUNTIME_API FglTFRuntimeParser : public FGCObject, public TSharedFromThis<FglTFRuntimeParser>
 {
 public:
+
+	static void Init();
+	static void Deinit();
+
+	static UMaterialInterface* OpaqueMaterial;
+	static UMaterialInterface* TranslucentMaterial;
+	static UMaterialInterface* TwoSidedMaterial;
+	static UMaterialInterface* TwoSidedTranslucentMaterial;
+	static UMaterialInterface* SGOpaqueMaterial;
+	static UMaterialInterface* SGTranslucentMaterial;
+	static UMaterialInterface* SGTwoSidedMaterial;
+	static UMaterialInterface* SGTwoSidedTranslucentMaterial;
+	
 	FglTFRuntimeParser(TSharedRef<FJsonObject> JsonObject, const FMatrix& InSceneBasis, float InSceneScale);
 
 	static TSharedPtr<FglTFRuntimeParser> FromFilename(const FString& Filename, const FglTFRuntimeConfig& LoaderConfig);
