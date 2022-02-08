@@ -54,7 +54,7 @@ private:
 	void LoadStaticMeshAsync(UStaticMesh* StaticMesh);
 
 	UFUNCTION()
-	void LoadSkeletalMeshAsync(USkeletalMesh* SkeletalMesh);
+	void OnSkeletalMeshAsyncLoaded(USkeletalMesh* SkeletalMesh);
 
 	// this is safe to share between game and async threads because everything is sequential
 	UPrimitiveComponent* CurrentPrimitiveComponent;

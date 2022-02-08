@@ -126,7 +126,7 @@ void AglTFRuntimeAssetActorAsync::LoadNextMeshAsync()
 	{
 		CurrentPrimitiveComponent = SkeletalMeshComponent;
 		FglTFRuntimeSkeletalMeshAsync Delegate;
-		Delegate.BindDynamic(this, &AglTFRuntimeAssetActorAsync::LoadSkeletalMeshAsync);
+		Delegate.BindDynamic(this, &AglTFRuntimeAssetActorAsync::OnSkeletalMeshAsyncLoaded);
 		Asset->LoadSkeletalMeshAsync(It->Value.MeshIndex, It->Value.SkinIndex, Delegate, SkeletalMeshConfig);
 	}
 }
@@ -168,11 +168,12 @@ void AglTFRuntimeAssetActorAsync::LoadStaticMeshAsync(UStaticMesh* StaticMesh)
 	}
 }
 
-void AglTFRuntimeAssetActorAsync::LoadSkeletalMeshAsync(USkeletalMesh* SkeletalMesh)
+void AglTFRuntimeAssetActorAsync::OnSkeletalMeshAsyncLoaded(USkeletalMesh* SkeletalMesh)
 {
 	if (USkeletalMeshComponent* SkeletalMeshComponent = Cast<USkeletalMeshComponent>(CurrentPrimitiveComponent))
 	{
 		SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
+		
 	}
 
 	MeshesToLoad.Remove(CurrentPrimitiveComponent);
