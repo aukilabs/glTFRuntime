@@ -1,26 +1,21 @@
 // Copyright 2020, Roberto De Ioris.
 
-
-#include "glTFRuntimeAssetActor.h"
-
-#include "Animation/AnimInstance.h"
+#include "glTFRuntimeAssetActorTrueAsync.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMeshSocket.h"
 #include "Animation/AnimSequence.h"
-#include "Async/Async.h"
 
 // Sets default values
-AglTFRuntimeAssetActor::AglTFRuntimeAssetActor()
+AglTFRuntimeAssetActorTrueAsync::AglTFRuntimeAssetActorTrueAsync()
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	AssetRoot = CreateDefaultSubobject<USceneComponent>(TEXT("AssetRoot"));
-	RootComponent = AssetRoot;
+	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("AssetRoot"));
 }
 
 // Called when the game starts or when spawned
-void AglTFRuntimeAssetActor::BeginPlay()
+void AglTFRuntimeAssetActorTrueAsync::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -28,7 +23,11 @@ void AglTFRuntimeAssetActor::BeginPlay()
 	{
 		return;
 	}
+	ProcessRootNodes();
+}
 
+void AglTFRuntimeAssetActorTrueAsync::ProcessRootNodes()
+{
 	TArray<FglTFRuntimeScene> Scenes = Asset->GetScenes();
 	for (FglTFRuntimeScene& Scene : Scenes)
 	{
@@ -48,7 +47,35 @@ void AglTFRuntimeAssetActor::BeginPlay()
 	}
 }
 
-void AglTFRuntimeAssetActor::ProcessNode(USceneComponent* NodeParentComponent, FglTFRuntimeNode& Node)
+void AglTFRuntimeAssetActorTrueAsync::SetAsset(UglTFRuntimeAsset* InAsset)
+{
+	if (InAsset)
+	{
+		if (Asset)
+		{
+			ClearAsset();
+		}
+		Asset = InAsset;
+		ProcessRootNodes();
+	}
+}
+
+void AglTFRuntimeAssetActorTrueAsync::ClearAsset()
+{
+	Asset = nullptr;
+	ClearInstanceComponents(true);
+	DiscoveredCurveAnimations.Empty();
+	CurveBasedAnimationsTimeTracker.Empty();
+	DiscoveredCurveAnimations.Empty();
+	CurveBasedAnimations.Empty();
+}
+
+void AglTFRuntimeAssetActorTrueAsync::SetAssetAsync(UglTFRuntimeAsset* InAsset, const std::function<void()>& OnFinished)
+{
+}
+
+
+void AglTFRuntimeAssetActorTrueAsync::ProcessNode(USceneComponent* NodeParentComponent, FglTFRuntimeNode& Node)
 {
 	// skip bones/joints
 	if (Asset->NodeIsBone(Node.Index))
@@ -160,15 +187,15 @@ void AglTFRuntimeAssetActor::ProcessNode(USceneComponent* NodeParentComponent, F
 	else
 	{
 		USkeletalMeshComponent* SkeletalMeshComponent = Cast<USkeletalMeshComponent>(NewComponent);
-		int NodeIndex = Node.Index;
-		AsyncTask(ENamedThreads::AnyNormalThreadNormalTask, [this, NodeIndex, SkeletalMeshComponent ]
+		FglTFRuntimeSkeletalAnimationConfig SkeletalAnimationConfig;
+		UAnimSequence* SkeletalAnimation = Asset->LoadNodeSkeletalAnimation(SkeletalMeshComponent->SkeletalMesh, Node.Index, SkeletalAnimationConfig);
+		if (SkeletalAnimation)
 		{
-			AnimSequences = Asset->LoadNodeAllSkeletalAnimations(SkeletalMeshComponent->SkeletalMesh, NodeIndex, SkeletalAnimationConfig);
-			AsyncTask(ENamedThreads::GameThread, [this, SkeletalMeshComponent]
-			{
-				this->OnSkeletalMeshComponentAnimationsLoaded(SkeletalMeshComponent);
-			});
-		});
+			SkeletalMeshComponent->AnimationData.AnimToPlay = SkeletalAnimation;
+			SkeletalMeshComponent->AnimationData.bSavedLooping = true;
+			SkeletalMeshComponent->AnimationData.bSavedPlaying = true;
+			SkeletalMeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		}
 	}
 
 	for (int32 ChildIndex : Node.ChildrenIndices)
@@ -182,7 +209,7 @@ void AglTFRuntimeAssetActor::ProcessNode(USceneComponent* NodeParentComponent, F
 	}
 }
 
-void AglTFRuntimeAssetActor::SetCurveAnimationByName(const FString& CurveAnimationName)
+void AglTFRuntimeAssetActorTrueAsync::SetCurveAnimationByName(const FString& CurveAnimationName)
 {
 	if (!DiscoveredCurveAnimationsNames.Contains(CurveAnimationName))
 	{
@@ -205,7 +232,7 @@ void AglTFRuntimeAssetActor::SetCurveAnimationByName(const FString& CurveAnimati
 }
 
 // Called every frame
-void AglTFRuntimeAssetActor::Tick(float DeltaTime)
+void AglTFRuntimeAssetActorTrueAsync::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
@@ -236,60 +263,12 @@ void AglTFRuntimeAssetActor::Tick(float DeltaTime)
 	}
 }
 
-
-void AglTFRuntimeAssetActor::OnSkeletalMeshComponentAnimationsLoaded(USkeletalMeshComponent* SkeletalMeshComponent)
-{
-	if (AnimSequences.Num())
-	{
-		AnimatedSkeletalMeshComponent = SkeletalMeshComponent;
-
-		UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[CurrentAnimSequence], FName("Default"));
-		SkeletalMeshComponent->AnimationData.AnimToPlay = NewMontage;
-		SkeletalMeshComponent->AnimationData.bSavedLooping = false;
-		SkeletalMeshComponent->AnimationData.bSavedPlaying = true;
-		SkeletalMeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-
-		UAnimInstance* Instance = SkeletalMeshComponent->GetAnimInstance();
-		if (!Instance)
-		{
-			SkeletalMeshComponent->InitializeAnimScriptInstance();
-			Instance = SkeletalMeshComponent->GetAnimInstance();
-		}
-		if (!Instance)
-		{
-			UE_LOG(LogTemp, Error, TEXT("Failed to initialize or get animation instance!"));
-			return;
-		}
-		Instance->OnMontageBlendingOut.AddDynamic(this, &AglTFRuntimeAssetActor::OnAnimationBlendingOut);
-	}
-}
-
-void AglTFRuntimeAssetActor::OnAnimationBlendingOut(UAnimMontage* Montage, bool bInterrupted)
-{
-	PlayNextAnimation(AnimatedSkeletalMeshComponent);
-}
-
-void AglTFRuntimeAssetActor::PlayNextAnimation(USkeletalMeshComponent* SkeletalMeshComponent)
-{
-	UAnimInstance* Instance = SkeletalMeshComponent->GetAnimInstance();
-	if (CurrentAnimSequence > AnimSequences.Num())
-	{
-		CurrentAnimSequence = 0;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Playing animation %s!"), *(AnimSequences[CurrentAnimSequence]->GetName()));
-	UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[CurrentAnimSequence], FName("Default"));
-	Instance->Montage_Play(NewMontage);
-	CurrentAnimSequence++;
-}
-
-
-void AglTFRuntimeAssetActor::ReceiveOnStaticMeshComponentCreated_Implementation(UStaticMeshComponent* StaticMeshComponent,
-                                                                                const FglTFRuntimeNode& Node)
+void AglTFRuntimeAssetActorTrueAsync::ReceiveOnStaticMeshComponentCreated_Implementation(UStaticMeshComponent* StaticMeshComponent,
+                                                                                         const FglTFRuntimeNode& Node)
 {
 }
 
-void AglTFRuntimeAssetActor::ReceiveOnSkeletalMeshComponentCreated_Implementation(USkeletalMeshComponent* SkeletalMeshComponent,
-                                                                                  const FglTFRuntimeNode& Node)
+void AglTFRuntimeAssetActorTrueAsync::ReceiveOnSkeletalMeshComponentCreated_Implementation(
+	USkeletalMeshComponent* SkeletalMeshComponent, const FglTFRuntimeNode& Node)
 {
 }

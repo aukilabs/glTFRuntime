@@ -2,24 +2,34 @@
 
 #pragma once
 
+#include <functional>
+
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "glTFRuntimeAsset.h"
-#include "glTFRuntimeAssetActor.generated.h"
+#include "glTFRuntimeAssetActorTrueAsync.generated.h"
 
 UCLASS()
-class GLTFRUNTIME_API AglTFRuntimeAssetActor : public AActor
+class GLTFRUNTIME_API AglTFRuntimeAssetActorTrueAsync : public AActor
 {
 	GENERATED_BODY()
-
-public:
+	
+public:	
 	// Sets default values for this actor's properties
-	AglTFRuntimeAssetActor();
+	AglTFRuntimeAssetActorTrueAsync();
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	virtual void ProcessRootNodes();
+
+	virtual void SetAsset(UglTFRuntimeAsset* InAsset);
+
+	virtual void ClearAsset();
+
+	virtual void SetAssetAsync(UglTFRuntimeAsset* InAsset, const std::function<void()>& OnFinished);
+	
 	virtual void ProcessNode(USceneComponent* NodeParentComponent, FglTFRuntimeNode& Node);
 
 	TMap<USceneComponent*, float> CurveBasedAnimationsTimeTracker;
@@ -29,22 +39,13 @@ protected:
 
 	TMap<USceneComponent*, TMap<FString, UglTFRuntimeAnimationCurve*>> DiscoveredCurveAnimations;
 
-	template <typename T>
+	template<typename T>
 	FName GetSafeNodeName(const FglTFRuntimeNode& Node)
 	{
 		return MakeUniqueObjectName(this, T::StaticClass(), *Node.Name);
 	}
 
-public:
-
-	USkeletalMeshComponent* AnimatedSkeletalMeshComponent;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<UAnimSequence*> AnimSequences;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int CurrentAnimSequence = 0;
-
+public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
@@ -57,9 +58,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Meta = (ExposeOnSpawn = true), Category = "glTFRuntime")
 	FglTFRuntimeSkeletalMeshConfig SkeletalMeshConfig;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Meta = (ExposeOnSpawn = true), Category = "glTFRuntime")
-	FglTFRuntimeSkeletalAnimationConfig SkeletalAnimationConfig;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "glTFRuntime")
 	TMap<USceneComponent*, UglTFRuntimeAnimationCurve*> CurveBasedAnimations;
 
@@ -71,15 +69,5 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "glTFRuntime")
 	void SetCurveAnimationByName(const FString& CurveAnimationName);
-
-private:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category="glTFRuntime")
-	USceneComponent* AssetRoot;
-
-	void OnSkeletalMeshComponentAnimationsLoaded(USkeletalMeshComponent* SkeletalMeshComponent);
-
-	UFUNCTION()
-	void OnAnimationBlendingOut(UAnimMontage* Montage, bool bInterrupted);
-
-	void PlayNextAnimation(USkeletalMeshComponent* SkeletalMeshComponent);
+	
 };
