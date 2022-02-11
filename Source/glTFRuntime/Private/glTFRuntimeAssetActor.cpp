@@ -272,7 +272,7 @@ void AglTFRuntimeAssetActor::OnAnimationBlendingOut(UAnimMontage* Montage, bool 
 void AglTFRuntimeAssetActor::PlayNextAnimation(USkeletalMeshComponent* SkeletalMeshComponent)
 {
 	UAnimInstance* Instance = SkeletalMeshComponent->GetAnimInstance();
-	if (CurrentAnimSequence > AnimSequences.Num())
+	if (CurrentAnimSequence >= AnimSequences.Num())
 	{
 		CurrentAnimSequence = 0;
 	}
