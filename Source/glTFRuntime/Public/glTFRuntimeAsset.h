@@ -85,6 +85,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "glTFRuntime")
 	TArray<UglTFRuntimeAnimationCurve*> LoadAllNodeAnimationCurves(const int32 NodeIndex);
 
+	UFUNCTION(BlueprintCallable, Category = "glTFRuntime")
 	TArray<UAnimSequence*> LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "glTFRuntime")

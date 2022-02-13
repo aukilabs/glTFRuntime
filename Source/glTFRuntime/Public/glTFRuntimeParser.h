@@ -1236,6 +1236,8 @@ protected:
 			return false;
 		}
 
+		// #TODO replace ternary operators with ifs outside of loop to get 1*IF instead of Elements*IF
+		// And measure difference!
 		for (int64 ElementIndex = 0; ElementIndex < Count; ElementIndex++)
 		{
 			int64 Index = ElementIndex * Stride;
