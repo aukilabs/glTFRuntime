@@ -424,12 +424,20 @@ TArray<UglTFRuntimeAnimationCurve*> UglTFRuntimeAsset::LoadAllNodeAnimationCurve
 	return Parser->LoadAllNodeAnimationCurves(NodeIndex);
 }
 
-TArray<UAnimSequence*> UglTFRuntimeAsset::LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+TArray<UAnimSequence*> UglTFRuntimeAsset::LoadMeshNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 MeshNodeIndex,
 	const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig)
 {
 	GLTF_CHECK_PARSER(TArray<UAnimSequence*>());
 
-	return Parser->LoadNodeAllSkeletalAnimations(SkeletalMesh, NodeIndex, SkeletalAnimationConfig);
+	return Parser->LoadNodeAllSkeletalAnimations(SkeletalMesh, MeshNodeIndex, SkeletalAnimationConfig);
+}
+
+void UglTFRuntimeAsset::LoadMeshNodeAllSkeletalAnimationsAsync(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+	const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TArray<UAnimSequence*>)> FinishedCallback)
+{
+	GLTF_CHECK_PARSER();
+
+	Parser->LoadNodeAllSkeletalAnimationsAsync(SkeletalMesh, NodeIndex, SkeletalAnimationConfig, FinishedCallback);
 }
 
 UAnimSequence* UglTFRuntimeAsset::LoadNodeSkeletalAnimation(USkeletalMesh* SkeletalMesh, const int32 NodeIndex, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig)

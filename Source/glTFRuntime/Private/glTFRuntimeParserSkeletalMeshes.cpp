@@ -1335,44 +1335,14 @@ UAnimSequence* FglTFRuntimeParser::LoadNodeSkeletalAnimation(USkeletalMesh* Skel
 	{
 		return nullptr;
 	}
-
-	FglTFRuntimeNode Node;
-	if (!LoadNode(NodeIndex, Node))
-	{
-		return nullptr;
-	}
-
-	if (Node.SkinIndex <= INDEX_NONE)
-	{
-		AddError("LoadNodeSkeletalAnimation()", FString::Printf(TEXT("No skin defined for node %d"), NodeIndex));
-		return nullptr;
-	}
-
-	TSharedPtr<FJsonObject> JsonSkinObject = GetJsonObjectFromRootIndex("skins", Node.SkinIndex);
-	if (!JsonSkinObject)
-	{
-		AddError("LoadNodeSkeletalAnimation()", "No skins defined in the asset");
-		return nullptr;
-	}
-
-	const TArray<TSharedPtr<FJsonValue>>* JsonJoints;
-	if (!JsonSkinObject->TryGetArrayField("joints", JsonJoints))
-	{
-		AddError("LoadNodeSkeletalAnimation()", "No joints defined in the skin");
-		return nullptr;
-	}
-
+		
 	TArray<int32> Joints;
-	for (TSharedPtr<FJsonValue> JsonJoint : (*JsonJoints))
+	if (!GetNodesSkinJoints(NodeIndex, Joints))
 	{
-		int64 JointIndex;
-		if (!JsonJoint->TryGetNumber(JointIndex))
-		{
-			return nullptr;
-		}
-		Joints.Add(JointIndex);
+		AddError("LoadNodeSkeletalAnimation()", "Cannot load joints for Node Index " + FString::FromInt(NodeIndex));
+		return nullptr;
 	}
-
+		
 	const TArray<TSharedPtr<FJsonValue>>* JsonAnimations;
 	if (!Root->TryGetArrayField("animations", JsonAnimations))
 	{
@@ -1385,11 +1355,10 @@ UAnimSequence* FglTFRuntimeParser::LoadNodeSkeletalAnimation(USkeletalMesh* Skel
 		TSharedPtr<FJsonObject> JsonAnimationObject = (*JsonAnimations)[JsonAnimationIndex]->AsObject();
 		if (!JsonAnimationObject)
 			return nullptr;
-		float Duration;
-		TMap<FString, FRawAnimSequenceTrack> Tracks;
-		TMap<FName, TArray<TPair<float, float>>> MorphTargetCurves;
+
+		FSkeletalAnimationRawData AnimationRawData;
 		bool bAnimationFound = false;
-		if (!LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), Tracks, MorphTargetCurves, Duration, SkeletalAnimationConfig,
+		if (!LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), AnimationRawData, SkeletalAnimationConfig,
 		                                    [Joints, &bAnimationFound](const FglTFRuntimeNode& Node) -> bool
 		                                    {
 			                                    bAnimationFound = Joints.Contains(Node.Index);
@@ -1401,16 +1370,56 @@ UAnimSequence* FglTFRuntimeParser::LoadNodeSkeletalAnimation(USkeletalMesh* Skel
 
 		if (bAnimationFound)
 		{
-			// this is very inefficient as we parse the tracks twice
-			// TODO: refactor it
-			return LoadSkeletalAnimation(SkeletalMesh, JsonAnimationIndex, SkeletalAnimationConfig);
+			return ComposeAnimSequenceFromTracks(SkeletalMesh, SkeletalAnimationConfig, AnimationRawData);
 		}
 	}
 
 	return nullptr;
 }
 
-TArray<UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32& NodeIndex,
+bool FglTFRuntimeParser::GetNodesSkinJoints(const int32 NodeIndex, TArray<int32>& OutJoints)
+{
+	FglTFRuntimeNode Node;
+	if (!LoadNode(NodeIndex, Node))
+	{
+		return false;
+	}
+
+	if (Node.SkinIndex <= INDEX_NONE)
+	{
+		AddError("GetNodesSkinJoints()", FString::Printf(TEXT("No skin defined for node %d"), NodeIndex));
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject> JsonSkinObject = GetJsonObjectFromRootIndex("skins", Node.SkinIndex);
+	if (!JsonSkinObject)
+	{
+		AddError("GetNodesSkinJoints()", "No skins defined in the asset");
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* JsonJoints;
+	if (!JsonSkinObject->TryGetArrayField("joints", JsonJoints) || !JsonJoints->Num())
+	{
+		AddError("GetNodesSkinJoints()", "No joints defined in the skin");
+		return false;
+	}
+
+	for (const TSharedPtr<FJsonValue> JsonJoint : (*JsonJoints))
+	{
+		int64 JointIndex;
+		if (!JsonJoint->TryGetNumber(JointIndex))
+		{
+			AddError("GetNodesSkinJoints()", "Joints json field contains non-number indices.");
+			return false;
+		}
+		OutJoints.Add(JointIndex);
+	}
+
+	return true;
+}
+
+TArray<UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
                                                                          const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig)
 {
 	TArray<UAnimSequence*> Anims;
@@ -1418,94 +1427,149 @@ TArray<UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkelet
 	{
 		return Anims;
 	}
-
-	FglTFRuntimeNode Node;
-	if (!LoadNode(NodeIndex, Node))
-	{
-		return Anims;
-	}
-
-	if (Node.SkinIndex <= INDEX_NONE)
-	{
-		AddError("LoadNodeSkeletalAnimation()", FString::Printf(TEXT("No skin defined for node %d"), NodeIndex));
-		return Anims;
-	}
-
-	TSharedPtr<FJsonObject> JsonSkinObject = GetJsonObjectFromRootIndex("skins", Node.SkinIndex);
-	if (!JsonSkinObject)
-	{
-		AddError("LoadNodeSkeletalAnimation()", "No skins defined in the asset");
-		return Anims;
-	}
-
-	const TArray<TSharedPtr<FJsonValue>>* JsonJoints;
-	if (!JsonSkinObject->TryGetArrayField("joints", JsonJoints))
-	{
-		AddError("LoadNodeSkeletalAnimation()", "No joints defined in the skin");
-		return Anims;
-	}
-
+		
 	TArray<int32> Joints;
-	for (TSharedPtr<FJsonValue> JsonJoint : (*JsonJoints))
+	if (!GetNodesSkinJoints(NodeIndex, Joints))
 	{
-		int64 JointIndex;
-		if (!JsonJoint->TryGetNumber(JointIndex))
-		{
-			return Anims;
-		}
-		Joints.Add(JointIndex);
+		return Anims;
 	}
-
+		
 	const TArray<TSharedPtr<FJsonValue>>* JsonAnimations;
 	if (!Root->TryGetArrayField("animations", JsonAnimations))
 	{
-		AddError("LoadNodeSkeletalAnimation()", "No animations defined in the asset");
+		AddError("LoadNodeAllSkeletalAnimation()", "No animations defined in the asset");
 		return Anims;
 	}
-
-	int i = 0;
-
-	while (TSharedPtr<FJsonObject> JsonAnimationObject = GetJsonObjectFromRootIndex("animations", i))
+		
+	for (int i = 0 ; i < JsonAnimations->Num(); i++)
 	{
-		
-		FString AnimName = "";
-		JsonAnimationObject->TryGetStringField("name", AnimName);
-		
-		float Duration;
-		TMap<FString, FRawAnimSequenceTrack> Tracks;
-		TMap<FName, TArray<TPair<float, float>>> MorphTargetCurves;
-		if (LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), Tracks, MorphTargetCurves, Duration, SkeletalAnimationConfig,
+		TSharedPtr<FJsonObject> JsonAnimationObject = (*JsonAnimations)[i]->AsObject();
+		FSkeletalAnimationRawData AnimationRawData;
+		if (!LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), AnimationRawData, SkeletalAnimationConfig,
 		                                   [&Joints](const FglTFRuntimeNode& Node) -> bool
 		                                   {
 			                                   return Joints.Contains(Node.Index);
 		                                   }))
 		{
-			if (UAnimSequence* Sequence = ComposeAnimSequenceFromTracks(AnimName, SkeletalMesh, SkeletalAnimationConfig, Duration, Tracks, MorphTargetCurves))
-			{
-				Anims.Add(Sequence);
-			}
+			continue;
 		}
-
-		i++;
+		
+		if (UAnimSequence* Sequence = ComposeAnimSequenceFromTracks(SkeletalMesh, SkeletalAnimationConfig, AnimationRawData))
+		{
+			Anims.Add(Sequence);
+		}
 	}
-
-
+	
 	return Anims;
 }
 
-UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString AnimationName,
-															     USkeletalMesh* SkeletalMesh,
-                                                                 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, float Duration,
-                                                                 TMap<FString, FRawAnimSequenceTrack>& Tracks,
-                                                                 TMap<FName, TArray<TPair<float, float>>>& MorphTargetCurves)
+void FglTFRuntimeParser::LoadNodeAllSkeletalAnimationsAsync(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TArray<UAnimSequence*>)> FinishedCallback)
 {
-	FName AnimFullName = AnimationName.IsEmpty() ? NAME_None : FName(AnimationName + SkeletalMesh->GetName());
-	int32 NumFrames = Duration * 30;
-	UAnimSequence* AnimSequence = NewObject<UAnimSequence>(GetTransientPackage(), AnimFullName, RF_Public);
-	AnimSequence->SetSkeleton(SkeletalMesh->Skeleton);
+	Async(EAsyncExecution::Thread, [this, &SkeletalMesh, &NodeIndex, &SkeletalAnimationConfig, FinishedCallback]
+	{
+		TArray<UAnimSequence*> AnimationSequences;
+		if (!SkeletalMesh)
+		{
+			AddError("LoadNodeAllSkeletalAnimation()", "No skeletal mesh provided for targeting animations.");
+			return;
+		}
+			
+		TArray<int32> Joints;
+		if (!GetNodesSkinJoints(NodeIndex, Joints))
+		{
+			return;
+		}
+			
+		const TArray<TSharedPtr<FJsonValue>>* JsonAnimations;
+		if (!Root->TryGetArrayField("animations", JsonAnimations))
+		{
+			AddError("LoadNodeAllSkeletalAnimation()", "No animations defined in the asset");
+			return;
+		}
+
+		// Make an array of futures to wait for all Internal Skeletal animation loading to be done.
+		TArray<bool> AnimationLoadingFutures;
+		TArray<FSkeletalAnimationRawData> AnimationDataArray;
+		for (int i = 0 ; i < JsonAnimations->Num(); i++)
+		{
+			AnimationDataArray.Add(FSkeletalAnimationRawData());
+		}
+		
+		for (int i = 0 ; i < JsonAnimations->Num(); i++)
+		{
+			TSharedPtr<FJsonObject> JsonAnimationObject = (*JsonAnimations)[i]->AsObject();
+			// Add a future for each animation we want to load.
+			AnimationLoadingFutures.Add(LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), AnimationDataArray[i], SkeletalAnimationConfig,
+											   [&Joints](const FglTFRuntimeNode& Node) -> bool
+											   {
+												   return Joints.Contains(Node.Index);
+											   }));
+		}
+		
+		// Map of array index in future AnimSequence.
+		TMap<int, UAnimSequence*> AnimSequenceFutureMap;
+		
+		// For all successfully loaded animations, kindly ask the Game Thread to create Animations objects for us.
+		for (int i = 0; i < JsonAnimations->Num(); i++)
+		{
+			if(AnimationLoadingFutures[i])
+			{
+				FString Name = AnimationDataArray[i].OptionalName.IsEmpty() ? "" : AnimationDataArray[i].OptionalName + "_" + SkeletalMesh->GetName();
+				UClass * CreatedObject = NewObject<UClass>(GetTransientPackage(), FName(Name), RF_Public);
+				CreatedObject->AddToRoot();
+			}
+		}
+		
+
+		TArray<TFuture<bool>> AnimationFillingFutures;
+		for (auto& IndexAndAnim : AnimSequenceFutureMap)
+		{
+			int Index = IndexAndAnim.Key;
+			UAnimSequence* Sequence = IndexAndAnim.Value;
+
+			FSkeletalAnimationRawData& RawData = AnimationDataArray[Index];
+			AnimationFillingFutures.Add(Async(EAsyncExecution::TaskGraph, [&](){
+				return FillAnimSequenceFromTracks(Sequence, SkeletalMesh, SkeletalAnimationConfig, RawData);
+			}));
+		}
+
+		// Wait for all Animation Sequence filling threads to finish.
+		for (int i = 0; i < AnimationFillingFutures.Num(); i++)
+		{
+			AnimationFillingFutures[i].Wait();
+		}
+
+		int i = 0;
+		for (auto& IndexAndAnim : AnimSequenceFutureMap)
+		{
+			int Index = IndexAndAnim.Key;
+			UAnimSequence* Sequence = IndexAndAnim.Value;
+			if (AnimationFillingFutures[i].Get())
+			{
+				AnimationSequences.Add(Sequence);
+			}
+			else
+			{
+				Sequence->ConditionalBeginDestroy();
+			}
+		}
+
+		AsyncTask(ENamedThreads::GameThread, [FinishedCallback, SkeletalMesh, AnimationSequences]()
+		{
+			FinishedCallback(SkeletalMesh, AnimationSequences);
+		});
+	});
+}
+
+bool FglTFRuntimeParser::FillAnimSequenceFromTracks(UAnimSequence* AnimSequence, USkeletalMesh* SkeletalMesh,
+	const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, FSkeletalAnimationRawData& AnimationRawData)
+{
+	int32 NumFrames = AnimationRawData.Duration * 30;
+	AnimSequence->SetSkeleton(SkeletalMesh->GetSkeleton());
 	AnimSequence->SetPreviewMesh(SkeletalMesh);
 	AnimSequence->SetRawNumberOfFrame(NumFrames);
-	AnimSequence->SequenceLength = Duration;
+	AnimSequence->SequenceLength = AnimationRawData.Duration;
 	AnimSequence->bEnableRootMotion = SkeletalAnimationConfig.bRootMotion;
 
 	const TArray<FTransform> BonesPoses = AnimSequence->GetSkeleton()->GetReferenceSkeleton().GetRefBonePose();
@@ -1527,7 +1591,7 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 #endif
 
 	bool bHasTracks = false;
-	for (TPair<FString, FRawAnimSequenceTrack>& Pair : Tracks)
+	for (TPair<FString, FRawAnimSequenceTrack>& Pair : AnimationRawData.Tracks)
 	{
 		FName BoneName = FName(Pair.Key);
 		int32 BoneIndex = AnimSequence->GetSkeleton()->GetReferenceSkeleton().FindBoneIndex(BoneName);
@@ -1612,7 +1676,7 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 				FglTFRuntimeNode AnimRootNode;
 				if (!LoadNode(SkeletalAnimationConfig.RootNodeIndex, AnimRootNode))
 				{
-					return nullptr;
+					return false;
 				}
 
 				for (int32 FrameIndex = 0; FrameIndex < Pair.Value.RotKeys.Num(); FrameIndex++)
@@ -1647,7 +1711,7 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 	}
 
 	// add MorphTarget curves
-	for (TPair<FName, TArray<TPair<float, float>>>& Pair : MorphTargetCurves)
+	for (TPair<FName, TArray<TPair<float, float>>>& Pair : AnimationRawData.MorphTargetCurves)
 	{
 		FSmartName SmartName;
 		if (!AnimSequence->GetSkeleton()->GetSmartNameByName(USkeleton::AnimCurveMappingName, Pair.Key, SmartName))
@@ -1658,7 +1722,7 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 
 		AnimSequence->RawCurveData.AddCurveData(SmartName);
 
-		FFloatCurve* NewCurve = (FFloatCurve*)AnimSequence->RawCurveData.GetCurveData(SmartName.UID, ERawCurveTrackTypes::RCT_Float);
+		FFloatCurve* NewCurve = static_cast<FFloatCurve*>(AnimSequence->RawCurveData.GetCurveData(SmartName.UID, ERawCurveTrackTypes::RCT_Float));
 
 		for (TPair<float, float>& CurvePair : Pair.Value)
 		{
@@ -1686,7 +1750,7 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 	if (!bHasTracks)
 	{
 		AddError("LoadSkeletalAnimation()", "No Bone or MorphTarget Tracks found in animation");
-		return nullptr;
+		return false;
 	}
 
 #if WITH_EDITOR
@@ -1696,7 +1760,8 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 			{
 				AnimSequence->PostProcessSequence();
 			});
-		} else
+		}
+		else
 		{
 			AnimSequence->PostProcessSequence();
 		}
@@ -1707,7 +1772,24 @@ UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(FString Animati
 	AnimSequence->PostLoad();
 #endif
 
-	return AnimSequence;
+	return true;		
+}
+
+
+UAnimSequence* FglTFRuntimeParser::ComposeAnimSequenceFromTracks(USkeletalMesh* SkeletalMesh,
+                                                                 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig,
+                                                                 FSkeletalAnimationRawData& AnimationRawData)
+{
+	// Compose full name in the format of "AnimationName_MeshName" (if the Optional name is set).
+	FName AnimFullName = AnimationRawData.OptionalName.IsEmpty() ? NAME_None : FName(AnimationRawData.OptionalName + "_" + SkeletalMesh->GetName());
+	UAnimSequence* AnimSequence = NewObject<UAnimSequence>(GetTransientPackage(), AnimFullName, RF_Public);
+
+	if (FillAnimSequenceFromTracks(AnimSequence, SkeletalMesh, SkeletalAnimationConfig, AnimationRawData))
+	{
+		return AnimSequence;
+	}
+	AnimSequence->ConditionalBeginDestroy();
+	return nullptr;
 }
 
 UAnimSequence* FglTFRuntimeParser::LoadSkeletalAnimation(USkeletalMesh* SkeletalMesh, const int32 AnimationIndex,
@@ -1725,29 +1807,37 @@ UAnimSequence* FglTFRuntimeParser::LoadSkeletalAnimation(USkeletalMesh* Skeletal
 		return nullptr;
 	}
 
-	float Duration;
-	TMap<FString, FRawAnimSequenceTrack> Tracks;
-	TMap<FName, TArray<TPair<float, float>>> MorphTargetCurves;
-	if (!LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), Tracks, MorphTargetCurves, Duration, SkeletalAnimationConfig,
+	
+	FSkeletalAnimationRawData AnimationRawData;
+	if (!LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), AnimationRawData, SkeletalAnimationConfig,
 	                                    [](const FglTFRuntimeNode& Node) -> bool { return true; }))
 	{
 		return nullptr;
 	}
 
-	FString AnimName = "No_Name";
-	JsonAnimationObject->TryGetStringField("name", AnimName);
-		
-	return ComposeAnimSequenceFromTracks(AnimName, SkeletalMesh, SkeletalAnimationConfig, Duration, Tracks, MorphTargetCurves);
+	return ComposeAnimSequenceFromTracks(SkeletalMesh, SkeletalAnimationConfig, AnimationRawData);
 }
 
-bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> JsonAnimationObject, TMap<FString, FRawAnimSequenceTrack>& Tracks,
-                                                        TMap<FName, TArray<TPair<float, float>>>& MorphTargetCurves, float& Duration,
-                                                        const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig,
+TFuture<bool> FglTFRuntimeParser::LoadSkeletalAnimation_Internal_OnThreadPool(const int32 AnimationIndex, FSkeletalAnimationRawData& OutAnimationData,
+	const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunctionRef<bool(const FglTFRuntimeNode& Node)> Filter)
+{
+	// Run on the thread pool and return a future to wait for result.
+	return Async(EAsyncExecution::ThreadPool, [&]()
+	{
+		TSharedPtr<FJsonObject> JsonAnimationObject = GetJsonObjectFromRootIndex("animations", AnimationIndex);
+		return LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), OutAnimationData, SkeletalAnimationConfig, Filter);
+	});
+}
+	
+bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> JsonAnimationObject, FSkeletalAnimationRawData& OutAnimationData, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig,
                                                         TFunctionRef<bool(const FglTFRuntimeNode& Node)> Filter)
 {
+	// Try getting animation name first.
+	JsonAnimationObject->TryGetStringField("name", OutAnimationData.OptionalName);
+
 	auto Callback = [&](const FglTFRuntimeNode& Node, const FString& Path, const TArray<float> Timeline, const TArray<FVector4> Values)
 	{
-		int32 NumFrames = Duration * 30;
+		int32 NumFrames = OutAnimationData.Duration * 30;
 
 		float FrameDelta = 1.f / 30;
 
@@ -1761,12 +1851,12 @@ bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> 
 				return;
 			}
 
-			if (!Tracks.Contains(Node.Name))
+			if (!OutAnimationData.Tracks.Contains(Node.Name))
 			{
-				Tracks.Add(Node.Name, FRawAnimSequenceTrack());
+				OutAnimationData.Tracks.Add(Node.Name, FRawAnimSequenceTrack());
 			}
 
-			FRawAnimSequenceTrack& Track = Tracks[Node.Name];
+			FRawAnimSequenceTrack& Track = OutAnimationData.Tracks[Node.Name];
 
 			float FrameBase = 0.f;
 			for (int32 Frame = 0; Frame < NumFrames; Frame++)
@@ -1797,12 +1887,12 @@ bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> 
 				return;
 			}
 
-			if (!Tracks.Contains(Node.Name))
+			if (!OutAnimationData.Tracks.Contains(Node.Name))
 			{
-				Tracks.Add(Node.Name, FRawAnimSequenceTrack());
+				OutAnimationData.Tracks.Add(Node.Name, FRawAnimSequenceTrack());
 			}
 
-			FRawAnimSequenceTrack& Track = Tracks[Node.Name];
+			FRawAnimSequenceTrack& Track = OutAnimationData.Tracks[Node.Name];
 
 			float FrameBase = 0.f;
 			for (int32 Frame = 0; Frame < NumFrames; Frame++)
@@ -1827,12 +1917,12 @@ bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> 
 				return;
 			}
 
-			if (!Tracks.Contains(Node.Name))
+			if (!OutAnimationData.Tracks.Contains(Node.Name))
 			{
-				Tracks.Add(Node.Name, FRawAnimSequenceTrack());
+				OutAnimationData.Tracks.Add(Node.Name, FRawAnimSequenceTrack());
 			}
 
-			FRawAnimSequenceTrack& Track = Tracks[Node.Name];
+			FRawAnimSequenceTrack& Track = OutAnimationData.Tracks[Node.Name];
 
 			float FrameBase = 0.f;
 			for (int32 Frame = 0; Frame < NumFrames; Frame++)
@@ -1873,11 +1963,11 @@ bool FglTFRuntimeParser::LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> 
 					                                                Values[TimelineIndex * MorphTargetNames.Num() + MorphTargetIndex].X);
 					Curves.Add(Curve);
 				}
-				MorphTargetCurves.Add(MorphTargetName, Curves);
+				OutAnimationData.MorphTargetCurves.Add(MorphTargetName, Curves);
 			}
 		}
 	};
 
 	FString IgnoredName;
-	return LoadAnimation_Internal(JsonAnimationObject, Duration, IgnoredName, Callback, Filter);
+	return LoadAnimation_Internal(JsonAnimationObject, OutAnimationData.Duration, IgnoredName, Callback, Filter);
 }

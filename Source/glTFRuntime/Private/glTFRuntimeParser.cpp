@@ -332,7 +332,7 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromBinary(const uint8* DataP
 
 void FglTFRuntimeParser::Init()
 {
-FglTFRuntimeParser::OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
+	FglTFRuntimeParser::OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
 	FglTFRuntimeParser::OpaqueMaterial->AddToRoot();
 	
 	FglTFRuntimeParser::TranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
@@ -508,6 +508,16 @@ int32 FglTFRuntimeParser::GetNumImages() const
 {
 	const TArray<TSharedPtr<FJsonValue>>* JsonArray;
 	if (Root->TryGetArrayField("images", JsonArray))
+	{
+		return JsonArray->Num();
+	}
+	return 0;
+}
+
+int32 FglTFRuntimeParser::GetNumSkeletalAnimations() const
+{
+	const TArray<TSharedPtr<FJsonValue>>* JsonArray;
+	if (Root->TryGetArrayField("animations", JsonArray))
 	{
 		return JsonArray->Num();
 	}

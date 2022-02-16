@@ -76,7 +76,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category="glTFRuntime")
 	USceneComponent* AssetRoot;
 
-	void OnSkeletalMeshComponentAnimationsLoaded(USkeletalMeshComponent* SkeletalMeshComponent);
+	void OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TArray<UAnimSequence*> AnimationSequences);
 
 	UFUNCTION()
 	void OnAnimationBlendingOut(UAnimMontage* Montage, bool bInterrupted);

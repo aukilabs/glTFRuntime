@@ -3,6 +3,7 @@
 
 #include "glTFRuntimeAssetActor.h"
 
+#include "AITypes.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMeshSocket.h"
@@ -161,14 +162,18 @@ void AglTFRuntimeAssetActor::ProcessNode(USceneComponent* NodeParentComponent, F
 	{
 		USkeletalMeshComponent* SkeletalMeshComponent = Cast<USkeletalMeshComponent>(NewComponent);
 		int NodeIndex = Node.Index;
-		AsyncTask(ENamedThreads::AnyNormalThreadNormalTask, [this, NodeIndex, SkeletalMeshComponent ]
+
+		TArray<UAnimSequence*> Sequences = Asset->LoadMeshNodeAllSkeletalAnimations(SkeletalMeshComponent->SkeletalMesh, NodeIndex,
+		                                                                            SkeletalAnimationConfig);
+		OnSkeletalMeshAnimationsLoaded(SkeletalMeshComponent->SkeletalMesh, Sequences);
+
+		/*
+		Asset->LoadMeshNodeAllSkeletalAnimationsAsync(SkeletalMeshComponent->SkeletalMesh, NodeIndex, SkeletalAnimationConfig,
+			[this](USkeletalMesh* Mesh, TArray<UAnimSequence*> Sequences)
 		{
-			AnimSequences = Asset->LoadNodeAllSkeletalAnimations(SkeletalMeshComponent->SkeletalMesh, NodeIndex, SkeletalAnimationConfig);
-			AsyncTask(ENamedThreads::GameThread, [this, SkeletalMeshComponent]
-			{
-				this->OnSkeletalMeshComponentAnimationsLoaded(SkeletalMeshComponent);
-			});
+			this->OnSkeletalMeshAnimationsLoaded(Mesh, Sequences);
 		});
+	    */
 	}
 
 	for (int32 ChildIndex : Node.ChildrenIndices)
@@ -237,23 +242,42 @@ void AglTFRuntimeAssetActor::Tick(float DeltaTime)
 }
 
 
-void AglTFRuntimeAssetActor::OnSkeletalMeshComponentAnimationsLoaded(USkeletalMeshComponent* SkeletalMeshComponent)
+void AglTFRuntimeAssetActor::OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TArray<UAnimSequence*> AnimationSequences)
 {
-	if (AnimSequences.Num())
+	if (AnimationSequences.Num())
 	{
-		AnimatedSkeletalMeshComponent = SkeletalMeshComponent;
+		AnimSequences = AnimationSequences;
+		AnimatedSkeletalMeshComponent = nullptr;
+
+		TArray<UActorComponent*> Components;
+		GetComponents(USkeletalMeshComponent::StaticClass(), Components);
+		for (UActorComponent* Component : Components)
+		{
+			USkeletalMeshComponent* CandidateComponent = Cast<USkeletalMeshComponent>(Component);
+			if (CandidateComponent && CandidateComponent->SkeletalMesh == SkeletalMesh)
+			{
+				AnimatedSkeletalMeshComponent = CandidateComponent;
+				break;
+			}
+		}
+
+		if (!AnimatedSkeletalMeshComponent)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to find component with matching skeletal mesh!"));
+			return;
+		}
 
 		UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[CurrentAnimSequence], FName("Default"));
-		SkeletalMeshComponent->AnimationData.AnimToPlay = NewMontage;
-		SkeletalMeshComponent->AnimationData.bSavedLooping = false;
-		SkeletalMeshComponent->AnimationData.bSavedPlaying = true;
-		SkeletalMeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		AnimatedSkeletalMeshComponent->AnimationData.AnimToPlay = NewMontage;
+		AnimatedSkeletalMeshComponent->AnimationData.bSavedLooping = false;
+		AnimatedSkeletalMeshComponent->AnimationData.bSavedPlaying = true;
+		AnimatedSkeletalMeshComponent->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 
-		UAnimInstance* Instance = SkeletalMeshComponent->GetAnimInstance();
+		UAnimInstance* Instance = AnimatedSkeletalMeshComponent->GetAnimInstance();
 		if (!Instance)
 		{
-			SkeletalMeshComponent->InitializeAnimScriptInstance();
-			Instance = SkeletalMeshComponent->GetAnimInstance();
+			AnimatedSkeletalMeshComponent->InitializeAnimScriptInstance();
+			Instance = AnimatedSkeletalMeshComponent->GetAnimInstance();
 		}
 		if (!Instance)
 		{

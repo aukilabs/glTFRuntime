@@ -14,6 +14,7 @@
 #if WITH_EDITOR
 #include "Rendering/SkeletalMeshLODImporterData.h"
 #endif
+#include "Async/Async.h"
 #include "Serialization/ArrayReader.h"
 #include "glTFRuntimeParser.generated.h"
 
@@ -984,6 +985,18 @@ struct FglTFRuntimeAudioEmitter
 	}
 };
 
+// Raw data parsed out from an animation. To be used to compose an actual UAnimSequence animation.
+struct FSkeletalAnimationRawData
+{
+	TMap<FString, FRawAnimSequenceTrack> Tracks;
+
+	TMap<FName, TArray<TPair<float, float>>> MorphTargetCurves;
+
+	float Duration;
+
+	FString OptionalName;
+};
+
 DECLARE_DYNAMIC_DELEGATE_OneParam(FglTFRuntimeStaticMeshAsync, UStaticMesh*, StaticMesh);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FglTFRuntimeSkeletalMeshAsync, USkeletalMesh*, SkeletalMesh);
 
@@ -1042,9 +1055,18 @@ public:
 	UAnimSequence* LoadSkeletalAnimation(USkeletalMesh* SkeletalMesh, const int32 AnimationIndex, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
 	UAnimSequence* LoadSkeletalAnimationByName(USkeletalMesh* SkeletalMesh, const FString AnimationName, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
 	UAnimSequence* LoadNodeSkeletalAnimation(USkeletalMesh* SkeletalMesh, const int32 NodeIndex, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
-	TArray<UAnimSequence*> LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32& NodeIndex,
-																		 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
-	UAnimSequence* ComposeAnimSequenceFromTracks(FString AnimationName, USkeletalMesh* SkeletalMesh, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, float Duration, TMap<FString, FRawAnimSequenceTrack>& Tracks, TMap<FName, TArray<TPair<float, float>>>& MorphTargetCurves);
+
+	bool GetNodesSkinJoints(const int32 NodeIndex, TArray<int32>& OutJoints);
+	
+	TArray<UAnimSequence*> LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+	                                                     const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
+
+	void LoadNodeAllSkeletalAnimationsAsync(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TArray<UAnimSequence*>)> FinishedCallback);
+
+	bool FillAnimSequenceFromTracks(UAnimSequence* FilledSequence, USkeletalMesh* SkeletalMesh, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, FSkeletalAnimationRawData& AnimationRawData);
+	
+	UAnimSequence* ComposeAnimSequenceFromTracks(USkeletalMesh* SkeletalMesh, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, FSkeletalAnimationRawData& AnimationRawData);
 
 	USkeleton* LoadSkeleton(const int32 SkinIndex, const FglTFRuntimeSkeletonConfig& SkeletonConfig);
 
@@ -1090,6 +1112,7 @@ public:
 
 	int32 GetNumMeshes() const;
 	int32 GetNumImages() const;
+	int32 GetNumSkeletalAnimations() const;
 
 	FglTFRuntimeError OnError;
 	FglTFRuntimeOnStaticMeshCreated OnStaticMeshCreated;
@@ -1147,7 +1170,8 @@ protected:
 
 	UMaterialInterface* BuildMaterial(const int32 Index, const FString& MaterialName, const FglTFRuntimeMaterial& RuntimeMaterial, const FglTFRuntimeMaterialsConfig& MaterialsConfig, const bool bUseVertexColors);
 
-	bool LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> JsonAnimationObject, TMap<FString, FRawAnimSequenceTrack>& Tracks, TMap<FName, TArray<TPair<float, float>>>& MorphTargetCurves, float& Duration, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunctionRef<bool(const FglTFRuntimeNode& Node)> Filter);
+	TFuture<bool> LoadSkeletalAnimation_Internal_OnThreadPool(const int32 AnimationIndex, FSkeletalAnimationRawData& OutAnimationData, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunctionRef<bool(const FglTFRuntimeNode& Node)> Filter);
+	bool LoadSkeletalAnimation_Internal(TSharedRef<FJsonObject> JsonAnimationObject, FSkeletalAnimationRawData& OutAnimationData, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunctionRef<bool(const FglTFRuntimeNode& Node)> Filter);
 
 	bool LoadAnimation_Internal(TSharedRef<FJsonObject> JsonAnimationObject, float& Duration, FString& Name, TFunctionRef<void(const FglTFRuntimeNode& Node, const FString& Path, const TArray<float> Timeline, const TArray<FVector4> Values)> Callback, TFunctionRef<bool(const FglTFRuntimeNode& Node)> NodeFilter);
 
