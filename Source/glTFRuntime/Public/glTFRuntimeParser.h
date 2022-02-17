@@ -1058,11 +1058,11 @@ public:
 
 	bool GetNodesSkinJoints(const int32 NodeIndex, TArray<int32>& OutJoints);
 	
-	TArray<UAnimSequence*> LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+	TMap<FString, UAnimSequence*> LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
 	                                                     const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig);
 
 	void LoadNodeAllSkeletalAnimationsAsync(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
-														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TArray<UAnimSequence*>)> FinishedCallback);
+														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TMap<FString, UAnimSequence*>)> FinishedCallback);
 
 	bool FillAnimSequenceFromTracks(UAnimSequence* FilledSequence, USkeletalMesh* SkeletalMesh, const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, FSkeletalAnimationRawData& AnimationRawData);
 	

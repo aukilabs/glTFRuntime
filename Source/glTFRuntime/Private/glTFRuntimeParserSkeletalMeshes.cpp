@@ -1419,26 +1419,27 @@ bool FglTFRuntimeParser::GetNodesSkinJoints(const int32 NodeIndex, TArray<int32>
 	return true;
 }
 
-TArray<UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
+TMap<FString, UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
                                                                          const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig)
 {
-	TArray<UAnimSequence*> Anims;
+	TMap<FString, UAnimSequence*> AnimationMap;
 	if (!SkeletalMesh)
 	{
-		return Anims;
+		AddError("LoadNodeAllSkeletalAnimation()", "No skeletal mesh provided for loading animations for.");
+		return AnimationMap;
 	}
 		
 	TArray<int32> Joints;
 	if (!GetNodesSkinJoints(NodeIndex, Joints))
 	{
-		return Anims;
+		return AnimationMap;
 	}
 		
 	const TArray<TSharedPtr<FJsonValue>>* JsonAnimations;
 	if (!Root->TryGetArrayField("animations", JsonAnimations))
 	{
 		AddError("LoadNodeAllSkeletalAnimation()", "No animations defined in the asset");
-		return Anims;
+		return AnimationMap;
 	}
 		
 	for (int i = 0 ; i < JsonAnimations->Num(); i++)
@@ -1456,108 +1457,24 @@ TArray<UAnimSequence*> FglTFRuntimeParser::LoadNodeAllSkeletalAnimations(USkelet
 		
 		if (UAnimSequence* Sequence = ComposeAnimSequenceFromTracks(SkeletalMesh, SkeletalAnimationConfig, AnimationRawData))
 		{
-			Anims.Add(Sequence);
+			FString FriendlyName = AnimationRawData.OptionalName.IsEmpty() ? "Animation_" + FString::FromInt(i) : AnimationRawData.OptionalName;
+			AnimationMap.Add(FriendlyName, Sequence);
 		}
 	}
 	
-	return Anims;
+	return AnimationMap;
 }
 
 void FglTFRuntimeParser::LoadNodeAllSkeletalAnimationsAsync(USkeletalMesh* SkeletalMesh, const int32 NodeIndex,
-														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TArray<UAnimSequence*>)> FinishedCallback)
+														 const FglTFRuntimeSkeletalAnimationConfig& SkeletalAnimationConfig, TFunction<void(USkeletalMesh*, TMap<FString, UAnimSequence*>)> FinishedCallback)
 {
-	Async(EAsyncExecution::Thread, [this, &SkeletalMesh, &NodeIndex, &SkeletalAnimationConfig, FinishedCallback]
+	Async(EAsyncExecution::Thread, [this, SkeletalMesh, NodeIndex, SkeletalAnimationConfig, FinishedCallback]
 	{
-		TArray<UAnimSequence*> AnimationSequences;
-		if (!SkeletalMesh)
-		{
-			AddError("LoadNodeAllSkeletalAnimation()", "No skeletal mesh provided for targeting animations.");
-			return;
-		}
-			
-		TArray<int32> Joints;
-		if (!GetNodesSkinJoints(NodeIndex, Joints))
-		{
-			return;
-		}
-			
-		const TArray<TSharedPtr<FJsonValue>>* JsonAnimations;
-		if (!Root->TryGetArrayField("animations", JsonAnimations))
-		{
-			AddError("LoadNodeAllSkeletalAnimation()", "No animations defined in the asset");
-			return;
-		}
+		TMap<FString, UAnimSequence*> AnimationMap = LoadNodeAllSkeletalAnimations(SkeletalMesh, NodeIndex, SkeletalAnimationConfig);
 
-		// Make an array of futures to wait for all Internal Skeletal animation loading to be done.
-		TArray<bool> AnimationLoadingFutures;
-		TArray<FSkeletalAnimationRawData> AnimationDataArray;
-		for (int i = 0 ; i < JsonAnimations->Num(); i++)
+		AsyncTask(ENamedThreads::GameThread, [SkeletalMesh, AnimationMap, FinishedCallback]()
 		{
-			AnimationDataArray.Add(FSkeletalAnimationRawData());
-		}
-		
-		for (int i = 0 ; i < JsonAnimations->Num(); i++)
-		{
-			TSharedPtr<FJsonObject> JsonAnimationObject = (*JsonAnimations)[i]->AsObject();
-			// Add a future for each animation we want to load.
-			AnimationLoadingFutures.Add(LoadSkeletalAnimation_Internal(JsonAnimationObject.ToSharedRef(), AnimationDataArray[i], SkeletalAnimationConfig,
-											   [&Joints](const FglTFRuntimeNode& Node) -> bool
-											   {
-												   return Joints.Contains(Node.Index);
-											   }));
-		}
-		
-		// Map of array index in future AnimSequence.
-		TMap<int, UAnimSequence*> AnimSequenceFutureMap;
-		
-		// For all successfully loaded animations, kindly ask the Game Thread to create Animations objects for us.
-		for (int i = 0; i < JsonAnimations->Num(); i++)
-		{
-			if(AnimationLoadingFutures[i])
-			{
-				FString Name = AnimationDataArray[i].OptionalName.IsEmpty() ? "" : AnimationDataArray[i].OptionalName + "_" + SkeletalMesh->GetName();
-				UClass * CreatedObject = NewObject<UClass>(GetTransientPackage(), FName(Name), RF_Public);
-				CreatedObject->AddToRoot();
-			}
-		}
-		
-
-		TArray<TFuture<bool>> AnimationFillingFutures;
-		for (auto& IndexAndAnim : AnimSequenceFutureMap)
-		{
-			int Index = IndexAndAnim.Key;
-			UAnimSequence* Sequence = IndexAndAnim.Value;
-
-			FSkeletalAnimationRawData& RawData = AnimationDataArray[Index];
-			AnimationFillingFutures.Add(Async(EAsyncExecution::TaskGraph, [&](){
-				return FillAnimSequenceFromTracks(Sequence, SkeletalMesh, SkeletalAnimationConfig, RawData);
-			}));
-		}
-
-		// Wait for all Animation Sequence filling threads to finish.
-		for (int i = 0; i < AnimationFillingFutures.Num(); i++)
-		{
-			AnimationFillingFutures[i].Wait();
-		}
-
-		int i = 0;
-		for (auto& IndexAndAnim : AnimSequenceFutureMap)
-		{
-			int Index = IndexAndAnim.Key;
-			UAnimSequence* Sequence = IndexAndAnim.Value;
-			if (AnimationFillingFutures[i].Get())
-			{
-				AnimationSequences.Add(Sequence);
-			}
-			else
-			{
-				Sequence->ConditionalBeginDestroy();
-			}
-		}
-
-		AsyncTask(ENamedThreads::GameThread, [FinishedCallback, SkeletalMesh, AnimationSequences]()
-		{
-			FinishedCallback(SkeletalMesh, AnimationSequences);
+			FinishedCallback(SkeletalMesh, AnimationMap);
 		});
 	});
 }

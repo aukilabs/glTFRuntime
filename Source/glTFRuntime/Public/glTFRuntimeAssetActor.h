@@ -40,8 +40,10 @@ public:
 	USkeletalMeshComponent* AnimatedSkeletalMeshComponent;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<UAnimSequence*> AnimSequences;
+	TMap<FString, UAnimSequence*> AnimSequences;
 
+	TArray<FString> AnimationNames;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int CurrentAnimSequence = 0;
 
@@ -76,7 +78,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"), Category="glTFRuntime")
 	USceneComponent* AssetRoot;
 
-	void OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TArray<UAnimSequence*> AnimationSequences);
+	void OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TMap<FString, UAnimSequence*>& AnimationSequences);
 
 	UFUNCTION()
 	void OnAnimationBlendingOut(UAnimMontage* Montage, bool bInterrupted);

@@ -163,17 +163,21 @@ void AglTFRuntimeAssetActor::ProcessNode(USceneComponent* NodeParentComponent, F
 		USkeletalMeshComponent* SkeletalMeshComponent = Cast<USkeletalMeshComponent>(NewComponent);
 		int NodeIndex = Node.Index;
 
-		TArray<UAnimSequence*> Sequences = Asset->LoadMeshNodeAllSkeletalAnimations(SkeletalMeshComponent->SkeletalMesh, NodeIndex,
-		                                                                            SkeletalAnimationConfig);
-		OnSkeletalMeshAnimationsLoaded(SkeletalMeshComponent->SkeletalMesh, Sequences);
+		// TMap<FString, UAnimSequence*> Sequences = Asset->LoadMeshNodeAllSkeletalAnimations(SkeletalMeshComponent->SkeletalMesh, NodeIndex,
+		//                                                                             SkeletalAnimationConfig);
+		// OnSkeletalMeshAnimationsLoaded(SkeletalMeshComponent->SkeletalMesh, Sequences);
 
-		/*
 		Asset->LoadMeshNodeAllSkeletalAnimationsAsync(SkeletalMeshComponent->SkeletalMesh, NodeIndex, SkeletalAnimationConfig,
-			[this](USkeletalMesh* Mesh, TArray<UAnimSequence*> Sequences)
+			[this](USkeletalMesh* Mesh, TMap<FString, UAnimSequence*> Sequences)
 		{
+			// Because animations were created on a non-game thread, they have the Async flag set -> clear it.
+			for (const auto& AnimationTuple : Sequences)
+			{
+				AnimationTuple.Value->ClearInternalFlags(EInternalObjectFlags::Async);
+			}
 			this->OnSkeletalMeshAnimationsLoaded(Mesh, Sequences);
 		});
-	    */
+	    
 	}
 
 	for (int32 ChildIndex : Node.ChildrenIndices)
@@ -242,11 +246,13 @@ void AglTFRuntimeAssetActor::Tick(float DeltaTime)
 }
 
 
-void AglTFRuntimeAssetActor::OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TArray<UAnimSequence*> AnimationSequences)
+void AglTFRuntimeAssetActor::OnSkeletalMeshAnimationsLoaded(USkeletalMesh* SkeletalMesh, TMap<FString, UAnimSequence*>& AnimationSequences)
 {
 	if (AnimationSequences.Num())
 	{
 		AnimSequences = AnimationSequences;
+		AnimSequences.GenerateKeyArray(AnimationNames);
+		
 		AnimatedSkeletalMeshComponent = nullptr;
 
 		TArray<UActorComponent*> Components;
@@ -267,7 +273,7 @@ void AglTFRuntimeAssetActor::OnSkeletalMeshAnimationsLoaded(USkeletalMesh* Skele
 			return;
 		}
 
-		UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[CurrentAnimSequence], FName("Default"));
+		UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[AnimationNames[CurrentAnimSequence]], FName("Default"));
 		AnimatedSkeletalMeshComponent->AnimationData.AnimToPlay = NewMontage;
 		AnimatedSkeletalMeshComponent->AnimationData.bSavedLooping = false;
 		AnimatedSkeletalMeshComponent->AnimationData.bSavedPlaying = true;
@@ -296,13 +302,15 @@ void AglTFRuntimeAssetActor::OnAnimationBlendingOut(UAnimMontage* Montage, bool 
 void AglTFRuntimeAssetActor::PlayNextAnimation(USkeletalMeshComponent* SkeletalMeshComponent)
 {
 	UAnimInstance* Instance = SkeletalMeshComponent->GetAnimInstance();
-	if (CurrentAnimSequence >= AnimSequences.Num())
+	if (CurrentAnimSequence >= AnimationNames.Num())
 	{
 		CurrentAnimSequence = 0;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Playing animation %s!"), *(AnimSequences[CurrentAnimSequence]->GetName()));
-	UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(AnimSequences[CurrentAnimSequence], FName("Default"));
+	const FString CurrentAnimationName = AnimationNames[CurrentAnimSequence];
+	UAnimSequence* CurrentAnimation = AnimSequences[CurrentAnimationName];
+	
+	UE_LOG(LogTemp, Warning, TEXT("Playing animation %s!"), *CurrentAnimationName);
+	UAnimMontage* NewMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(CurrentAnimation, FName("Default"));
 	Instance->Montage_Play(NewMontage);
 	CurrentAnimSequence++;
 }
