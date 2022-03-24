@@ -1,9 +1,7 @@
 // Copyright 2020, Roberto De Ioris.
 
-
 #include "glTFRuntimeAssetActor.h"
 
-#include "AITypes.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/StaticMeshSocket.h"

@@ -332,11 +332,11 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromBinary(const uint8* DataP
 
 void FglTFRuntimeParser::Init()
 {
-	FglTFRuntimeParser::OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
-	FglTFRuntimeParser::OpaqueMaterial->AddToRoot();
+	OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
+	OpaqueMaterial->AddToRoot();
 	
-	FglTFRuntimeParser::TranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
-	FglTFRuntimeParser::TranslucentMaterial->AddToRoot();
+	TranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
+	TranslucentMaterial->AddToRoot();
 
 	TwoSidedMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTwoSided_Inst"));
 	TwoSidedMaterial->AddToRoot();
