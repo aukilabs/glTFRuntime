@@ -39,12 +39,12 @@ public:
 
 	USkeletalMeshComponent* AnimatedSkeletalMeshComponent;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "glTFRuntime")
 	TMap<FString, UAnimSequence*> AnimSequences;
 
 	TArray<FString> AnimationNames;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "glTFRuntime")
 	int CurrentAnimSequence = 0;
 
 	// Called every frame

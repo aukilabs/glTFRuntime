@@ -8,6 +8,10 @@
 
 void FglTFRuntimeModule::StartupModule()
 {
+    if(!FModuleManager::Get().IsModuleLoaded("ProceduralMeshComponent"))
+    {
+        FModuleManager::Get().LoadModule("ProceduralMeshComponent");
+    }
 	FglTFRuntimeParser::Init();
 }
 

@@ -332,28 +332,28 @@ TSharedPtr<FglTFRuntimeParser> FglTFRuntimeParser::FromBinary(const uint8* DataP
 
 void FglTFRuntimeParser::Init()
 {
-	OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeBase"));
+	OpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntimeBase"));
 	OpaqueMaterial->AddToRoot();
 	
-	TranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTranslucent_Inst"));
+	TranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntimeTranslucent_Inst"));
 	TranslucentMaterial->AddToRoot();
 
-	TwoSidedMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTwoSided_Inst"));
+	TwoSidedMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntimeTwoSided_Inst"));
 	TwoSidedMaterial->AddToRoot();
 
-	TwoSidedTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntimeTwoSidedTranslucent_Inst"));
+	TwoSidedTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntimeTwoSidedTranslucent_Inst"));
 	TwoSidedTranslucentMaterial->AddToRoot();
 
-	SGOpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntime_SG_Base"));
+	SGOpaqueMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntime_SG_Base"));
 	SGOpaqueMaterial->AddToRoot();
 
-	SGTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntime_SG_Translucent_Inst"));
+	SGTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntime_SG_Translucent_Inst"));
 	SGTranslucentMaterial->AddToRoot();
 
-	SGTwoSidedMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntime_SG_TwoSided_Inst"));
+	SGTwoSidedMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntime_SG_TwoSided_Inst"));
 	SGTwoSidedMaterial->AddToRoot();
 
-	SGTwoSidedTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/glTFRuntime/M_glTFRuntime_SG_TwoSidedTranslucent_Inst"));
+	SGTwoSidedTranslucentMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/AukiUnrealSDK/M_glTFRuntime_SG_TwoSidedTranslucent_Inst"));
 	SGTwoSidedTranslucentMaterial->AddToRoot();
 }
 

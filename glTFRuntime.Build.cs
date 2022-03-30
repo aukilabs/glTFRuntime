@@ -2,12 +2,11 @@
 
 using UnrealBuildTool;
 
-public class glTFRuntimeEditor : ModuleRules
+public class glTFRuntime : ModuleRules
 {
-    public glTFRuntimeEditor(ReadOnlyTargetRules Target) : base(Target)
+    public glTFRuntime(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-        bUseUnity = false;
 
         PublicIncludePaths.AddRange(
             new string[] {
@@ -26,9 +25,10 @@ public class glTFRuntimeEditor : ModuleRules
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
-                "Core"
+                "Core",
 				// ... add other public dependencies that you statically link with here ...
-			}
+                "ProceduralMeshComponent"
+            }
             );
 
 
@@ -38,11 +38,22 @@ public class glTFRuntimeEditor : ModuleRules
                 "CoreUObject",
                 "Engine",
                 "JSON",
-                "RHI",
                 "RenderCore",
+                "RHI",
+                "ApplicationCore",
+                "Http",
+                "PhysicsCore",
+                "Projects"
 				// ... add private dependencies that you statically link with here ...	
 			}
             );
+
+        if (Target.Type == TargetType.Editor)
+        {
+            PrivateDependencyModuleNames.Add("SkeletalMeshUtilitiesCommon");
+            PrivateDependencyModuleNames.Add("UnrealEd");
+            PrivateDependencyModuleNames.Add("AssetRegistry");
+        }
 
 
         DynamicallyLoadedModuleNames.AddRange(
